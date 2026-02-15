@@ -28,9 +28,43 @@ export default function Home() {
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      setImage(e.target?.result as string);
+      const result = e.target?.result as string;
+      // Compress image to reduce size
+      compressImage(result, 800, 600).then(compressed => {
+        setImage(compressed);
+      });
     };
     reader.readAsDataURL(file);
+  };
+
+  const compressImage = (dataUrl: string, maxWidth: number, maxHeight: number): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = (width * maxHeight) / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.src = dataUrl;
+    });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -60,14 +94,14 @@ export default function Home() {
   };
 
   const handleStart = () => {
-    const params = new URLSearchParams();
-    if (message.trim()) {
-      params.set("msg", encodeURIComponent(message.trim()));
-    }
-    if (image) {
-      params.set("img", image);
-    }
-    router.push(`/show?${params.toString()}`);
+    // Save to localStorage
+    const data = {
+      msg: message.trim(),
+      img: image,
+      createdAt: Date.now()
+    };
+    localStorage.setItem("fireworkData", JSON.stringify(data));
+    router.push("/show");
   };
 
   return (
