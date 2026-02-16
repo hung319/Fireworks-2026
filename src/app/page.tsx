@@ -29,8 +29,8 @@ export default function Home() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
-      // Compress image to reduce size
-      compressImage(result, 800, 600).then(compressed => {
+      // Compress image to reduce size - smaller for URL
+      compressImage(result, 300, 300).then(compressed => {
         setImage(compressed);
       });
     };
@@ -61,7 +61,8 @@ export default function Home() {
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.7));
+        // Lower quality for smaller URL
+        resolve(canvas.toDataURL("image/jpeg", 0.5));
       };
       img.src = dataUrl;
     });
@@ -93,15 +94,32 @@ export default function Home() {
     }
   };
 
+  const encodeData = (msg: string, img: string | null): string => {
+    try {
+      const json = JSON.stringify({ m: msg, i: img });
+      // Simple compression using btoa
+      return btoa(encodeURIComponent(json));
+    } catch {
+      return "";
+    }
+  };
+
+  const tryNavigate = (url: string) => {
+    // Check if URL is too long, fallback to localStorage
+    if (url.length > 8000) {
+      // Use localStorage fallback
+      const data = { msg: message.trim(), img: image };
+      localStorage.setItem("fireworkData", JSON.stringify(data));
+      router.push("/show");
+    } else {
+      router.push(url);
+    }
+  };
+
   const handleStart = () => {
-    // Save to localStorage
-    const data = {
-      msg: message.trim(),
-      img: image,
-      createdAt: Date.now()
-    };
-    localStorage.setItem("fireworkData", JSON.stringify(data));
-    router.push("/show");
+    const encoded = encodeData(message.trim(), image);
+    const url = `/show?d=${encoded}`;
+    tryNavigate(url);
   };
 
   return (

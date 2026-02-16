@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import styles from "./show.module.css";
 
 interface Particle {
@@ -10,11 +10,8 @@ interface Particle {
   vx: number;
   vy: number;
   life: number;
-  maxLife: number;
   color: string;
   size: number;
-  trail: { x: number; y: number }[];
-  decay: number;
 }
 
 interface Firework {
@@ -29,35 +26,61 @@ interface Firework {
 }
 
 interface FireworkData {
-  msg: string;
-  img: string | null;
+  m?: string;
+  i?: string | null;
+  msg?: string;
+  img?: string | null;
 }
 
-const defaultColors = ["#ff2d75", "#ffd700", "#00f5ff", "#ff6b35", "#a855f7", "#22c55e", "#f43f5e", "#3b82f6", "#ec4899", "#f97316"];
+const defaultColors = [
+  "#ff2d75", "#ffd700", "#00f5ff", "#ff6b35", 
+  "#a855f7", "#22c55e", "#f43f5e", "#3b82f6",
+  "#ec4899", "#f97316", "#84cc16", "#06b6d4"
+];
 
 function ShowContent() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchParams = useSearchParams();
   const router = useRouter();
   
   const [showMessage, setShowMessage] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showControls, setShowControls] = useState(true);
   
-  const [data, setData] = useState<FireworkData>({ msg: "", img: null });
+  const [data, setData] = useState<{ msg: string; img: string | null }>({ msg: "", img: null });
 
   useEffect(() => {
-    // Read from localStorage
+    // Try URL params first (for sharing)
+    const encoded = searchParams.get("d");
+    if (encoded) {
+      try {
+        const json = decodeURIComponent(atob(encoded));
+        const parsed = JSON.parse(json) as FireworkData;
+        setData({
+          msg: parsed.m || "",
+          img: parsed.i || null
+        });
+        return;
+      } catch (e) {
+        console.error("Failed to parse URL data");
+      }
+    }
+    
+    // Fallback to localStorage (for direct access)
     const stored = localStorage.getItem("fireworkData");
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as FireworkData;
-        setData(parsed);
+        setData({
+          msg: parsed.msg || parsed.m || "",
+          img: parsed.img || parsed.i || null
+        });
       } catch (e) {
         console.error("Failed to parse stored data");
       }
     }
-  }, []);
+  }, [searchParams]);
 
   const { msg, img: imageData } = data;
 
@@ -73,19 +96,19 @@ function ShowContent() {
           return;
         }
         
-        canvas.width = 50;
-        canvas.height = 50;
-        ctx.drawImage(img, 0, 0, 50, 50);
+        canvas.width = 30;
+        canvas.height = 30;
+        ctx.drawImage(img, 0, 0, 30, 30);
         
-        const imageData = ctx.getImageData(0, 0, 50, 50);
+        const imageData = ctx.getImageData(0, 0, 30, 30);
         const pixels = imageData.data;
         const colorCounts: { [key: string]: number } = {};
         
-        for (let i = 0; i < pixels.length; i += 16) {
+        for (let i = 0; i < pixels.length; i += 12) {
           const r = Math.round(pixels[i] / 32) * 32;
           const g = Math.round(pixels[i + 1] / 32) * 32;
           const b = Math.round(pixels[i + 2] / 32) * 32;
-          if (pixels[i + 3] > 128) { // Only count non-transparent pixels
+          if (pixels[i + 3] > 128) {
             const hex = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
             colorCounts[hex] = (colorCounts[hex] || 0) + 1;
           }
@@ -93,7 +116,7 @@ function ShowContent() {
         
         const sortedColors = Object.entries(colorCounts)
           .sort((a, b) => b[1] - a[1])
-          .slice(0, 10)
+          .slice(0, 8)
           .map(([color]) => color);
         
         resolve(sortedColors.length > 0 ? sortedColors : defaultColors);
@@ -103,22 +126,20 @@ function ShowContent() {
     });
   };
 
-  // Show message after delay - longer if there's content
   useEffect(() => {
     const hasContent = msg || imageData;
-    const delay = hasContent ? 3000 : 2000;
+    const delay = hasContent ? 3500 : 2500;
     const timer = setTimeout(() => {
       setShowMessage(true);
     }, delay);
     return () => clearTimeout(timer);
   }, [msg, imageData]);
 
-  // Hide controls after showing message
   useEffect(() => {
     if (showMessage) {
       const timer = setTimeout(() => {
         setShowControls(false);
-      }, 5000);
+      }, 6000);
       return () => clearTimeout(timer);
     }
   }, [showMessage]);
@@ -128,7 +149,7 @@ function ShowContent() {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
     let animationId: number;
@@ -136,11 +157,9 @@ function ShowContent() {
     let colors = defaultColors;
     let isRunning = true;
 
-    // Determine firework intensity based on content
     const hasContent = msg || imageData;
-    const maxFireworks = hasContent ? 12 : 6;
-    const launchProbability = hasContent ? 0.12 : 0.06;
-    const particleCount = hasContent ? 120 : 80;
+    const maxFireworks = hasContent ? 8 : 5;
+    const launchProbability = hasContent ? 0.08 : 0.04;
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -149,12 +168,13 @@ function ShowContent() {
 
     const createFirework = (customColors?: string[]): Firework => {
       const colorArray = customColors || colors;
+      const startX = canvas.width * 0.15 + Math.random() * canvas.width * 0.7;
       return {
-        x: Math.random() * canvas.width * 0.8 + canvas.width * 0.1,
+        x: startX,
         y: canvas.height,
-        targetY: Math.random() * (canvas.height * 0.45) + canvas.height * 0.1,
-        vx: (Math.random() - 0.5) * 2,
-        vy: -Math.random() * 7 - 12,
+        targetY: canvas.height * 0.15 + Math.random() * canvas.height * 0.35,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -Math.random() * 6 - 11,
         color: colorArray[Math.floor(Math.random() * colorArray.length)],
         exploded: false,
         particles: [],
@@ -163,49 +183,77 @@ function ShowContent() {
 
     const explode = (firework: Firework, customColors?: string[]) => {
       const colorArray = customColors || colors;
-      const count = Math.floor(Math.random() * 40) + particleCount;
+      const count = hasContent ? 50 : 35;
       
       for (let i = 0; i < count; i++) {
-        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.2;
-        const speed = Math.random() * 5 + 2;
+        const angle = (Math.PI * 2 * i) / count;
+        const speed = Math.random() * 4 + 1.5;
         const particle: Particle = {
           x: firework.x,
           y: firework.y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           life: 1,
-          maxLife: Math.random() * 0.4 + 0.6,
           color: colorArray[Math.floor(Math.random() * colorArray.length)],
-          size: Math.random() * 2.5 + 1.5,
-          trail: [],
-          decay: Math.random() * 0.008 + 0.008,
+          size: Math.random() * 2 + 1,
         };
         firework.particles.push(particle);
       }
 
-      // Add secondary explosion particles
-      for (let i = 0; i < count / 3; i++) {
+      // Secondary burst
+      for (let i = 0; i < count / 2; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = Math.random() * 3 + 1;
+        const speed = Math.random() * 2.5 + 0.5;
         const particle: Particle = {
           x: firework.x,
           y: firework.y,
           vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 2,
+          vy: Math.sin(angle) * speed - 1.5,
           life: 1,
-          maxLife: Math.random() * 0.3 + 0.4,
           color: colorArray[Math.floor(Math.random() * colorArray.length)],
-          size: Math.random() * 1.5 + 0.5,
-          trail: [],
-          decay: Math.random() * 0.01 + 0.012,
+          size: Math.random() * 1.2 + 0.4,
         };
         firework.particles.push(particle);
       }
     };
 
+    const drawDashedLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string, width: number, life: number) => {
+      const dashLength = 4 + life * 4;
+      const gapLength = 3 + life * 3;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dashes = Math.floor(dist / (dashLength + gapLength));
+      
+      if (dashes <= 0) return;
+      
+      const ux = dx / dist;
+      const uy = dy / dist;
+      
+      ctx.beginPath();
+      let currentX = x1;
+      let currentY = y1;
+      let drawn = 0;
+      
+      for (let i = 0; i < dashes && drawn < dist; i++) {
+        const segmentLength = Math.min(dashLength, dist - drawn);
+        ctx.moveTo(currentX, currentY);
+        ctx.lineTo(currentX + ux * segmentLength, currentY + uy * segmentLength);
+        currentX += ux * (dashLength + gapLength);
+        currentY += uy * (dashLength + gapLength);
+        drawn += dashLength + gapLength;
+      }
+      
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.globalAlpha = life * 0.7;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+
     const update = () => {
-      // Dark trail effect for smooth fading
-      ctx.fillStyle = "rgba(0, 0, 0, 0.12)";
+      // Simple clear for better performance
+      ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Launch new fireworks
@@ -217,27 +265,29 @@ function ShowContent() {
         const fw = fireworks[i];
 
         if (!fw.exploded) {
-          // Draw firework rocket
+          // Draw rocket with trail
+          const trailLength = 25;
+          const alpha = Math.min(1, (fw.y - fw.targetY) / 200);
+          
+          // Dashed trail
+          if (fw.y > fw.targetY + 30) {
+            drawDashedLine(
+              ctx, 
+              fw.x, fw.y, 
+              fw.x - fw.vx * 4, fw.y - fw.vy * 4, 
+              fw.color, 2, alpha
+            );
+          }
+          
+          // Rocket dot
           ctx.beginPath();
-          ctx.arc(fw.x, fw.y, 2.5, 0, Math.PI * 2);
+          ctx.arc(fw.x, fw.y, 2, 0, Math.PI * 2);
           ctx.fillStyle = fw.color;
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = fw.color;
           ctx.fill();
-          ctx.shadowBlur = 0;
 
-          // Draw trail
-          ctx.beginPath();
-          ctx.moveTo(fw.x, fw.y);
-          ctx.lineTo(fw.x - fw.vx * 2, fw.y - fw.vy * 2);
-          ctx.strokeStyle = fw.color;
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // Update physics for rocket
-          fw.vx += (Math.random() - 0.5) * 0.3;
+          // Physics
           fw.x += fw.vx;
-          fw.vy += 0.12;
+          fw.vy += 0.1;
           fw.y += fw.vy;
 
           if (fw.y <= fw.targetY || fw.vy >= 0) {
@@ -248,50 +298,28 @@ function ShowContent() {
           for (let j = fw.particles.length - 1; j >= 0; j--) {
             const p = fw.particles[j];
             
-            // Store trail
-            p.trail.push({ x: p.x, y: p.y });
-            if (p.trail.length > 15) p.trail.shift();
-
-            // Draw trail with dashed effect
-            if (p.trail.length > 1) {
-              ctx.beginPath();
-              for (let k = 0; k < p.trail.length; k++) {
-                const t = p.trail[k];
-                if (k === 0) {
-                  ctx.moveTo(t.x, t.y);
-                } else {
-                  // Add some randomness for dashed effect
-                  if (k % 2 === 0) {
-                    ctx.lineTo(t.x, t.y);
-                  } else {
-                    ctx.moveTo(t.x, t.y);
-                  }
-                }
-              }
-              ctx.strokeStyle = p.color;
-              ctx.lineWidth = p.size * 0.8 * p.life;
-              ctx.globalAlpha = p.life * 0.4;
-              ctx.stroke();
-              ctx.globalAlpha = 1;
-            }
-
+            const prevX = p.x;
+            const prevY = p.y;
+            
             // Update physics
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.06; // gravity
-            p.vx *= 0.97;
-            p.vy *= 0.97;
-            p.life -= p.decay;
+            p.vy += 0.04;
+            p.vx *= 0.98;
+            p.vy *= 0.98;
+            p.life -= 0.012;
 
-            // Draw particle with glow
+            // Draw dashed trail
+            if (p.life > 0.3) {
+              drawDashedLine(ctx, prevX, prevY, p.x, p.y, p.color, p.size * 0.6, p.life);
+            }
+
+            // Draw particle
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
             ctx.fillStyle = p.color;
             ctx.globalAlpha = p.life;
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = p.color;
             ctx.fill();
-            ctx.shadowBlur = 0;
             ctx.globalAlpha = 1;
 
             if (p.life <= 0) {
@@ -363,7 +391,6 @@ function ShowContent() {
     if (!canvas) return;
 
     try {
-      // Create a temporary canvas without controls
       const tempCanvas = document.createElement("canvas");
       tempCanvas.width = canvas.width;
       tempCanvas.height = canvas.height;
@@ -371,27 +398,22 @@ function ShowContent() {
       
       if (!tempCtx) return;
 
-      // Fill black background
       tempCtx.fillStyle = "#000000";
       tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-      
-      // Draw current canvas content
       tempCtx.drawImage(canvas, 0, 0);
 
-      // Draw message if visible
       if (showMessage && msg) {
-        tempCtx.font = `bold ${Math.min(64, tempCanvas.width / 10)}px var(--font-playfair), serif`;
+        const fontSize = Math.min(56, tempCanvas.width / 12);
+        tempCtx.font = `bold ${fontSize}px var(--font-playfair), Georgia, serif`;
         tempCtx.textAlign = "center";
         tempCtx.textBaseline = "middle";
         
-        // Text shadow
-        tempCtx.shadowColor = "rgba(255, 45, 117, 0.8)";
-        tempCtx.shadowBlur = 30;
+        tempCtx.shadowColor = "rgba(255, 45, 117, 0.9)";
+        tempCtx.shadowBlur = 25;
         tempCtx.fillStyle = "#f5f5f5";
         tempCtx.fillText(decodeURIComponent(msg), tempCanvas.width / 2, tempCanvas.height / 2);
       }
 
-      // Convert to blob and download
       tempCanvas.toBlob((blob) => {
         if (blob) {
           const url = URL.createObjectURL(blob);
