@@ -47,11 +47,19 @@ function ShowContent() {
   const [error, setError] = useState<string | null>(null);
   
   const [data, setData] = useState<{ msg: string; img: string | null }>({ msg: "", img: null });
+  const [fireworkCount, setFireworkCount] = useState(40);
 
   // Fetch data from API
   useEffect(() => {
     const fetchData = async () => {
       const id = searchParams.get("id");
+      const countParam = searchParams.get("count");
+      if (countParam) {
+        const count = parseInt(countParam);
+        if (!isNaN(count) && count > 0) {
+          setFireworkCount(count);
+        }
+      }
       
       if (id) {
         try {
@@ -180,9 +188,8 @@ function ShowContent() {
     // 1) Randomize the number of fireworks between 30 and 50 for a richer display
     const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
     const hasContent = msg || imageData;
-    const maxFireworks = 40;
-    // Launch probability - always maintain fireworks on screen
-    const launchProbability = 0.12;
+    const maxFireworks = fireworkCount;
+    const launchProbability = 0.15;
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -374,7 +381,7 @@ function ShowContent() {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationId);
     };
-  }, [imageData, msg]);
+  }, [imageData, msg, fireworkCount]);
 
   const handleShare = async () => {
     const url = window.location.href;

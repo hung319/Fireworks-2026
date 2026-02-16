@@ -183,6 +183,28 @@
   background: var(--accent-pink);
 }
 
+.numberInput {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--input-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.numberInput:focus {
+  border-color: var(--accent-pink);
+  box-shadow: 0 0 20px rgba(255, 45, 117, 0.2);
+  outline: none;
+}
+
+.numberInput::-webkit-inner-spin-button,
+.numberInput::-webkit-outer-spin-button {
+  opacity: 1;
+}
+
 .startBtn {
   width: 100%;
   padding: 18px 32px;

@@ -6,8 +6,8 @@ export async function POST(request: NextRequest) {
     const bodyObj = await request.json();
     const message = bodyObj?.message;
     const image = bodyObj?.image;
+    const fireworkCount = bodyObj?.fireworkCount;
 
-    // Calculate expiration (7 days from now)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     
