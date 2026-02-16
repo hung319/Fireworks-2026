@@ -118,9 +118,27 @@ function ShowContent() {
     });
   };
 
+  // Draw uploaded image on canvas
+  const drawImageOnCanvas = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    if (!imageData) return;
+    
+    const img = new Image();
+    img.onload = () => {
+      // Draw image in center with fade effect
+      const imgSize = Math.min(width, height) * 0.6;
+      const x = (width - imgSize) / 2;
+      const y = (height - imgSize) / 2;
+      
+      ctx.globalAlpha = 0.3;
+      ctx.drawImage(img, x, y, imgSize, imgSize);
+      ctx.globalAlpha = 1;
+    };
+    img.src = imageData;
+  };
+
   useEffect(() => {
     const hasContent = msg || imageData;
-    const delay = hasContent ? 3500 : 2500;
+    const delay = hasContent ? 3500 : 500;
     const timer = setTimeout(() => {
       setShowMessage(true);
     }, delay);
@@ -141,17 +159,18 @@ function ShowContent() {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     let animationId: number;
     let fireworks: Firework[] = [];
     let colors = defaultColors;
     let isRunning = true;
+    let hasImage = false;
 
     const hasContent = msg || imageData;
-    const maxFireworks = hasContent ? 8 : 5;
-    const launchProbability = hasContent ? 0.08 : 0.04;
+    const maxFireworks = hasContent ? 15 : 25;
+    const launchProbability = hasContent ? 0.1 : 0.15;
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -160,13 +179,13 @@ function ShowContent() {
 
     const createFirework = (customColors?: string[]): Firework => {
       const colorArray = customColors || colors;
-      const startX = canvas.width * 0.15 + Math.random() * canvas.width * 0.7;
+      const startX = canvas.width * 0.1 + Math.random() * canvas.width * 0.8;
       return {
         x: startX,
         y: canvas.height,
-        targetY: canvas.height * 0.15 + Math.random() * canvas.height * 0.35,
-        vx: (Math.random() - 0.5) * 1.5,
-        vy: -Math.random() * 6 - 11,
+        targetY: canvas.height * 0.1 + Math.random() * canvas.height * 0.4,
+        vx: (Math.random() - 0.5) * 2,
+        vy: -Math.random() * 5 - 10,
         color: colorArray[Math.floor(Math.random() * colorArray.length)],
         exploded: false,
         particles: [],
@@ -175,11 +194,11 @@ function ShowContent() {
 
     const explode = (firework: Firework, customColors?: string[]) => {
       const colorArray = customColors || colors;
-      const count = hasContent ? 50 : 35;
+      const count = hasContent ? 40 : 30;
       
       for (let i = 0; i < count; i++) {
-        const angle = (Math.PI * 2 * i) / count;
-        const speed = Math.random() * 4 + 1.5;
+        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.1;
+        const speed = Math.random() * 3.5 + 1;
         const particle: Particle = {
           x: firework.x,
           y: firework.y,
@@ -193,25 +212,25 @@ function ShowContent() {
       }
 
       // Secondary burst
-      for (let i = 0; i < count / 2; i++) {
+      for (let i = 0; i < count / 2.5; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = Math.random() * 2.5 + 0.5;
+        const speed = Math.random() * 2 + 0.5;
         const particle: Particle = {
           x: firework.x,
           y: firework.y,
           vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 1.5,
+          vy: Math.sin(angle) * speed - 1,
           life: 1,
           color: colorArray[Math.floor(Math.random() * colorArray.length)],
-          size: Math.random() * 1.2 + 0.4,
+          size: Math.random() * 1 + 0.5,
         };
         firework.particles.push(particle);
       }
     };
 
     const drawDashedLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string, width: number, life: number) => {
-      const dashLength = 4 + life * 4;
-      const gapLength = 3 + life * 3;
+      const dashLength = 3 + life * 3;
+      const gapLength = 2 + life * 2;
       const dx = x2 - x1;
       const dy = y2 - y1;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -238,7 +257,7 @@ function ShowContent() {
       
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
-      ctx.globalAlpha = life * 0.7;
+      ctx.globalAlpha = life * 0.6;
       ctx.stroke();
       ctx.globalAlpha = 1;
     };
@@ -247,6 +266,12 @@ function ShowContent() {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // Draw uploaded image in background if exists
+      if (hasImage && imageData) {
+        drawImageOnCanvas(ctx, canvas.width, canvas.height);
+      }
+
+      // Launch new fireworks
       if (fireworks.length < maxFireworks && Math.random() < launchProbability) {
         fireworks.push(createFirework(colors.length > 0 ? colors : undefined));
       }
@@ -255,25 +280,24 @@ function ShowContent() {
         const fw = fireworks[i];
 
         if (!fw.exploded) {
-          const trailLength = 25;
           const alpha = Math.min(1, (fw.y - fw.targetY) / 200);
           
-          if (fw.y > fw.targetY + 30) {
+          if (fw.y > fw.targetY + 20) {
             drawDashedLine(
               ctx, 
               fw.x, fw.y, 
-              fw.x - fw.vx * 4, fw.y - fw.vy * 4, 
-              fw.color, 2, alpha
+              fw.x - fw.vx * 3, fw.y - fw.vy * 3, 
+              fw.color, 1.5, alpha
             );
           }
           
           ctx.beginPath();
-          ctx.arc(fw.x, fw.y, 2, 0, Math.PI * 2);
+          ctx.arc(fw.x, fw.y, 1.5, 0, Math.PI * 2);
           ctx.fillStyle = fw.color;
           ctx.fill();
 
           fw.x += fw.vx;
-          fw.vy += 0.1;
+          fw.vy += 0.08;
           fw.y += fw.vy;
 
           if (fw.y <= fw.targetY || fw.vy >= 0) {
@@ -289,13 +313,13 @@ function ShowContent() {
             
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.04;
+            p.vy += 0.03;
             p.vx *= 0.98;
             p.vy *= 0.98;
-            p.life -= 0.012;
+            p.life -= 0.01;
 
-            if (p.life > 0.3) {
-              drawDashedLine(ctx, prevX, prevY, p.x, p.y, p.color, p.size * 0.6, p.life);
+            if (p.life > 0.2) {
+              drawDashedLine(ctx, prevX, prevY, p.x, p.y, p.color, p.size * 0.5, p.life);
             }
 
             ctx.beginPath();
@@ -327,6 +351,7 @@ function ShowContent() {
       
       if (imageData) {
         colors = await extractColorsFromImage(imageData);
+        hasImage = true;
       }
       
       update();
@@ -474,14 +499,11 @@ function ShowContent() {
     <main className={styles.main} ref={containerRef} onClick={toggleControls}>
       <canvas ref={canvasRef} className={styles.canvas} />
       
-      <div className={`${styles.messageContainer} ${showMessage ? styles.visible : ""}`}>
-        {msg && (
+      {msg && showMessage && (
+        <div className={`${styles.messageContainer} ${showMessage ? styles.visible : ""}`}>
           <h1 className={styles.message}>{decodeURIComponent(msg)}</h1>
-        )}
-        {!msg && (
-          <h1 className={styles.message}>🎆</h1>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className={`${styles.actions} ${showControls ? styles.visible : styles.hidden}`}>
         <button className={styles.backBtn} onClick={handleBack}>
