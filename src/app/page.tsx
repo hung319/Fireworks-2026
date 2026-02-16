@@ -10,16 +10,8 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [fireworkCount, setFireworkCount] = useState(40);
-  const [isCustomCount, setIsCustomCount] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    if (!isCustomCount) {
-      const randomCount = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
-      setFireworkCount(randomCount);
-    }
-  }, [isCustomCount]);
 
   const maxChars = 500;
 
@@ -203,7 +195,6 @@ export default function Home() {
               onChange={(e) => {
                 const value = parseInt(e.target.value) || 40;
                 setFireworkCount(Math.min(100, Math.max(5, value)));
-                setIsCustomCount(true);
               }}
               min={5}
               max={100}

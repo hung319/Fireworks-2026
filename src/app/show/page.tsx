@@ -34,9 +34,6 @@ const defaultColors = [
 function ShowContent() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Persist background image across frames using refs
-  const imageRef = useRef<HTMLImageElement | null>(null);
-  const imageReadyRef = useRef<boolean>(false);
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -86,6 +83,7 @@ function ShowContent() {
   }, [searchParams]);
 
   const { msg, img: imageData } = data;
+  const hasContent = msg || imageData;
 
   const extractColorsFromImage = (imgSrc: string): Promise<string[]> => {
     return new Promise((resolve) => {
@@ -129,29 +127,6 @@ function ShowContent() {
     });
   };
 
-  // Draw uploaded image on canvas (background)
-  const drawImageOnCanvas = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    if (!imageData) return;
-    const imgSize = Math.min(width, height) * 0.6;
-    const x = (width - imgSize) / 2;
-    const y = (height - imgSize) / 2;
-    // Lazy-load and cache the image element using a persistent ref
-    if (!imageRef.current) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        imageReadyRef.current = true;
-      };
-      img.src = imageData;
-      imageRef.current = img;
-    }
-    if (imageReadyRef.current && imageRef.current) {
-      ctx.globalAlpha = 0.3;
-      ctx.drawImage(imageRef.current, x, y, imgSize, imgSize);
-      ctx.globalAlpha = 1;
-    }
-  };
-
   useEffect(() => {
     const hasContent = msg || imageData;
     const delay = hasContent ? 3500 : 500;
@@ -182,12 +157,7 @@ function ShowContent() {
     let fireworks: Firework[] = [];
     let colors = defaultColors;
     let isRunning = true;
-    let hasImage = false;
-    // Image rendering state will be kept in refs to persist across renders
 
-    // 1) Randomize the number of fireworks between 30 and 50 for a richer display
-    const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-    const hasContent = msg || imageData;
     const maxFireworks = fireworkCount;
     const launchProbability = 0.15;
 
@@ -283,11 +253,6 @@ function ShowContent() {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw uploaded image in background if exists
-      if (imageData) {
-        drawImageOnCanvas(ctx, canvas.width, canvas.height);
-      }
-
       // Launch new fireworks
       if (fireworks.length < maxFireworks && Math.random() < launchProbability) {
         fireworks.push(createFirework(colors.length > 0 ? colors : undefined));
@@ -368,7 +333,6 @@ function ShowContent() {
       
       if (imageData) {
         colors = await extractColorsFromImage(imageData);
-        hasImage = true;
       }
       
       update();
@@ -381,7 +345,7 @@ function ShowContent() {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationId);
     };
-  }, [imageData, msg, fireworkCount]);
+  }, [imageData, msg, fireworkCount, hasContent]);
 
   const handleShare = async () => {
     const url = window.location.href;
