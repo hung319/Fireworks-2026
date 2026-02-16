@@ -49,6 +49,12 @@ function ShowContent() {
   const [data, setData] = useState<{ msg: string; img: string | null }>({ msg: "", img: null });
   const [fireworkCount, setFireworkCount] = useState(40);
 
+  const fireworksRef = useRef<Firework[]>([]);
+  const colorsRef = useRef<string[]>(defaultColors);
+  const isRunningRef = useRef(true);
+  const animationIdRef = useRef<number>(0);
+  const initializedRef = useRef(false);
+
   // Fetch data from API
   useEffect(() => {
     const fetchData = async () => {
@@ -143,6 +149,8 @@ function ShowContent() {
   }, [showMessage]);
 
   useEffect(() => {
+    if (loading) return;
+    
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
@@ -150,18 +158,15 @@ function ShowContent() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    canvas.width = window.innerWidth || 800;
-    canvas.height = window.innerHeight || 600;
-
-    let animationId: number;
-    let fireworks: Firework[] = [];
-    let colors = defaultColors;
-    let isRunning = true;
+    // Only initialize once
+    if (!initializedRef.current) {
+      canvas.width = window.innerWidth || 800;
+      canvas.height = window.innerHeight || 600;
+      initializedRef.current = true;
+    }
 
     const maxFireworks = fireworkCount;
     const launchProbability = 0.4;
-
-    // Firework types: peony (round burst), willow (drooping trails), chrysanthemum (multi-stream)
     const fireworkTypes: ('peony' | 'willow' | 'chrysanthemum')[] = ['peony', 'willow', 'chrysanthemum'];
 
     const resize = () => {
@@ -169,8 +174,20 @@ function ShowContent() {
       canvas.height = window.innerHeight;
     };
 
-    const createFirework = (customColors?: string[]): Firework => {
-      const colorArray = customColors || colors;
+    // Extract colors from image if available
+    const initColors = async () => {
+      if (imageData) {
+        colorsRef.current = await extractColorsFromImage(imageData);
+      } else {
+        colorsRef.current = defaultColors;
+      }
+    };
+    
+    // Initialize colors
+    initColors();
+
+    const createFirework = (): Firework => {
+      const colorArray = colorsRef.current;
       const startX = canvas.width * 0.1 + Math.random() * canvas.width * 0.8;
       const type = fireworkTypes[Math.floor(Math.random() * fireworkTypes.length)];
       return {
@@ -186,12 +203,11 @@ function ShowContent() {
       };
     };
 
-    const explode = (firework: Firework, customColors?: string[]) => {
-      const colorArray = customColors || colors;
+    const explode = (firework: Firework) => {
+      const colorArray = colorsRef.current;
       const type = firework.type;
       
       if (type === 'peony') {
-        // Peony: Uniform circular burst, forming a spherical light
         const count = 80;
         for (let i = 0; i < count; i++) {
           const angle = (Math.PI * 2 * i) / count + Math.random() * 0.15;
@@ -210,7 +226,6 @@ function ShowContent() {
           firework.particles.push(particle);
         }
       } else if (type === 'willow') {
-        // Willow: Drooping trails like a weeping willow tree
         const count = 60;
         for (let i = 0; i < count; i++) {
           const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
@@ -229,7 +244,6 @@ function ShowContent() {
           firework.particles.push(particle);
         }
       } else if (type === 'chrysanthemum') {
-        // Chrysanthemum: Multiple streams with trails
         const count = 100;
         for (let i = 0; i < count; i++) {
           const angle = (Math.PI * 2 * i) / count + Math.random() * 0.2;
@@ -247,7 +261,6 @@ function ShowContent() {
           };
           firework.particles.push(particle);
         }
-        // Secondary burst
         for (let i = 0; i < count / 3; i++) {
           const angle = Math.random() * Math.PI * 2;
           const speed = Math.random() * 2 + 0.5;
@@ -268,7 +281,6 @@ function ShowContent() {
     };
 
     const drawDashedLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string, width: number, life: number) => {
-      // Use a crisp, consistent dashed pattern to mimic real fireworks trails
       const dashLength = 6;
       const gapLength = 4;
       const dx = x2 - x1;
@@ -304,12 +316,12 @@ function ShowContent() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Launch new fireworks
-      if (fireworks.length < maxFireworks && Math.random() < launchProbability) {
-        fireworks.push(createFirework(colors.length > 0 ? colors : undefined));
+      if (fireworksRef.current.length < maxFireworks && Math.random() < launchProbability) {
+        fireworksRef.current.push(createFirework());
       }
 
-      for (let i = fireworks.length - 1; i >= 0; i--) {
-        const fw = fireworks[i];
+      for (let i = fireworksRef.current.length - 1; i >= 0; i--) {
+        const fw = fireworksRef.current[i];
 
         if (!fw.exploded) {
           const alpha = Math.min(1, (fw.y - fw.targetY) / 200);
@@ -334,7 +346,7 @@ function ShowContent() {
 
           if (fw.y <= fw.targetY || fw.vy >= 0) {
             fw.exploded = true;
-            explode(fw, colors.length > 0 ? colors : undefined);
+            explode(fw);
           }
         } else {
           for (let j = fw.particles.length - 1; j >= 0; j--) {
@@ -381,33 +393,34 @@ function ShowContent() {
           }
 
           if (fw.particles.length === 0) {
-            fireworks.splice(i, 1);
+            fireworksRef.current.splice(i, 1);
           }
         }
       }
 
-      if (isRunning) {
-        animationId = requestAnimationFrame(update);
+      if (isRunningRef.current) {
+        animationIdRef.current = requestAnimationFrame(update);
       }
     };
 
-    const init = async () => {
+    // Start animation loop
+    isRunningRef.current = true;
+    update();
+
+    // Handle resize
+    const handleResize = () => {
       resize();
-      window.addEventListener("resize", resize);
-      if (imageData) {
-        colors = await extractColorsFromImage(imageData);
-      }
-      update();
     };
-
-    init();
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      isRunning = false;
-      window.removeEventListener("resize", resize);
-      cancelAnimationFrame(animationId);
+      isRunningRef.current = false;
+      if (animationIdRef.current) {
+        cancelAnimationFrame(animationIdRef.current);
+      }
+      window.removeEventListener("resize", handleResize);
     };
-  }, [msg, fireworkCount, hasContent, imageData]);
+  }, [loading, fireworkCount, imageData]);
 
   const handleShare = async () => {
     const url = window.location.href;
