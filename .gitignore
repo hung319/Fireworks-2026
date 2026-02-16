@@ -41,7 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 # prisma
-prisma/dev.db
-prisma/dev.db-journal
+# Note: dev.db is intentionally NOT ignored so it deploys with the app
+# prisma/dev.db
+# prisma/dev.db-journal
+# /dev.db
+# /dev.db-journal
 /dev.db
 /dev.db-journal
