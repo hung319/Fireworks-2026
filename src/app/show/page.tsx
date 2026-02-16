@@ -53,6 +53,50 @@ function ShowContent() {
   const colorsRef = useRef<string[]>([...defaultColors]);
   const isRunningRef = useRef(true);
   const animationIdRef = useRef<number>(0);
+  const imageShownRef = useRef(false);
+  const imagePixelsRef = useRef<{x: number, y: number, color: string}[]>([]);
+  const formingImageRef = useRef(false);
+  const particlesImageRef = useRef<{x: number, y: number, tx: number, ty: number, color: string, life: number}[]>([]);
+
+  const extractImagePixels = async (imgSrc: string, w: number, h: number): Promise<{x: number, y: number, color: string}[]> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const tempCanvas = document.createElement("canvas");
+        const scale = Math.min(w * 0.6 / img.width, h * 0.5 / img.height);
+        const imgW = img.width * scale;
+        const imgH = img.height * scale;
+        tempCanvas.width = imgW;
+        tempCanvas.height = imgH;
+        const tempCtx = tempCanvas.getContext("2d");
+        if (!tempCtx) {
+          resolve([]);
+          return;
+        }
+        tempCtx.drawImage(img, 0, 0, imgW, imgH);
+        const imgData = tempCtx.getImageData(0, 0, imgW, imgH);
+        const pixels: {x: number, y: number, color: string}[] = [];
+        const offsetX = (w - imgW) / 2;
+        const offsetY = (h - imgH) / 2;
+        for (let y = 0; y < imgH; y += 3) {
+          for (let x = 0; x < imgW; x += 3) {
+            const idx = (y * imgW + x) * 4;
+            const r = imgData.data[idx];
+            const g = imgData.data[idx + 1];
+            const b = imgData.data[idx + 2];
+            const a = imgData.data[idx + 3];
+            if (a > 128) {
+              const color = `rgb(${r},${g},${b})`;
+              pixels.push({ x: offsetX + x, y: offsetY + y, color });
+            }
+          }
+        }
+        resolve(pixels);
+      };
+      img.onerror = () => resolve([]);
+      img.src = imgSrc;
+    });
+  };
 
   // Fetch data from API
   useEffect(() => {
@@ -152,6 +196,7 @@ function ShowContent() {
       }).catch(() => {
         colorsRef.current = [...defaultColors];
       });
+      imageShownRef.current = false;
     } else if (!loading) {
       colorsRef.current = [...defaultColors];
     }
@@ -401,6 +446,46 @@ function ShowContent() {
 
           if (fw.particles.length === 0) {
             fireworksRef.current.splice(i, 1);
+          }
+        }
+      }
+
+      if (imageData && fireworksRef.current.length === 0 && maxFireworks > 0 && !formingImageRef.current) {
+        formingImageRef.current = true;
+        extractImagePixels(imageData, canvas.width, canvas.height).then(pixels => {
+          imagePixelsRef.current = pixels;
+          particlesImageRef.current = pixels.map(p => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            tx: p.x,
+            ty: p.y,
+            color: p.color,
+            life: 1
+          }));
+        });
+      }
+
+      if (particlesImageRef.current.length > 0) {
+        const particles = particlesImageRef.current;
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          const dx = p.tx - p.x;
+          const dy = p.ty - p.y;
+          p.x += dx * 0.03;
+          p.y += dy * 0.03;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 2) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x - dx * 0.1, p.y - dy * 0.1);
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 1;
+            ctx.stroke();
           }
         }
       }
