@@ -46,7 +46,7 @@ function ShowContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [data, setData] = useState<{ msg: string }>({ msg: "" });
+  const [data, setData] = useState<{ msg: string; img: string | null }>({ msg: "", img: null });
   const [fireworkCount, setFireworkCount] = useState(40);
 
   // Fetch data from API
@@ -72,7 +72,8 @@ function ShowContent() {
           }
           const result = await response.json();
           setData({
-            msg: result.message || ""
+            msg: result.message || "",
+            img: result.image || null
           });
         } catch (e) {
           setError("Có lỗi xảy ra");
@@ -84,8 +85,45 @@ function ShowContent() {
     fetchData();
   }, [searchParams]);
 
-  const { msg } = data;
+  const { msg, img: imageData } = data;
   const hasContent = msg;
+
+  const extractColorsFromImage = (imgSrc: string): Promise<string[]> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(defaultColors);
+          return;
+        }
+        canvas.width = 30;
+        canvas.height = 30;
+        ctx.drawImage(img, 0, 0, 30, 30);
+        const imgData = ctx.getImageData(0, 0, 30, 30);
+        const pixels = imgData.data;
+        const colorCounts: { [key: string]: number } = {};
+        for (let i = 0; i < pixels.length; i += 12) {
+          const r = Math.round(pixels[i] / 32) * 32;
+          const g = Math.round(pixels[i + 1] / 32) * 32;
+          const b = Math.round(pixels[i + 2] / 32) * 32;
+          if (pixels[i + 3] > 128) {
+            const hex = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+            colorCounts[hex] = (colorCounts[hex] || 0) + 1;
+          }
+        }
+        const sortedColors = Object.entries(colorCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([color]) => color);
+        resolve(sortedColors.length > 0 ? sortedColors : defaultColors);
+      };
+      img.onerror = () => resolve(defaultColors);
+      img.src = imgSrc;
+    });
+  };
 
   useEffect(() => {
     const delay = hasContent ? 3500 : 500;
@@ -112,13 +150,16 @@ function ShowContent() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    canvas.width = window.innerWidth || 800;
+    canvas.height = window.innerHeight || 600;
+
     let animationId: number;
     let fireworks: Firework[] = [];
     let colors = defaultColors;
     let isRunning = true;
 
     const maxFireworks = fireworkCount;
-    const launchProbability = 0.25;
+    const launchProbability = 0.4;
 
     // Firework types: peony (round burst), willow (drooping trails), chrysanthemum (multi-stream)
     const fireworkTypes: ('peony' | 'willow' | 'chrysanthemum')[] = ['peony', 'willow', 'chrysanthemum'];
@@ -353,6 +394,9 @@ function ShowContent() {
     const init = async () => {
       resize();
       window.addEventListener("resize", resize);
+      if (imageData) {
+        colors = await extractColorsFromImage(imageData);
+      }
       update();
     };
 
@@ -363,7 +407,7 @@ function ShowContent() {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationId);
     };
-  }, [msg, fireworkCount, hasContent]);
+  }, [msg, fireworkCount, hasContent, imageData]);
 
   const handleShare = async () => {
     const url = window.location.href;
