@@ -348,6 +348,11 @@ function ShowContent() {
           fw.vy += 0.08;
           fw.y += fw.vy;
 
+          if (fw.y < -50 || fw.x < -50 || fw.x > canvas.width + 50) {
+            fireworksRef.current.splice(i, 1);
+            continue;
+          }
+
           if (fw.y <= fw.targetY || fw.vy >= 0) {
             fw.exploded = true;
             explode(fw);
@@ -379,17 +384,21 @@ function ShowContent() {
             p.vx *= drag;
             p.vy *= drag;
             p.life -= decay / p.maxLife;
+            if (p.life < 0) p.life = 0;
 
             if (p.life > 0.15) {
               drawDashedLine(ctx, prevX, prevY, p.x, p.y, p.color, p.size * 0.6, p.life);
             }
 
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size * Math.min(1, p.life * 1.5), 0, Math.PI * 2);
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life;
-            ctx.fill();
-            ctx.globalAlpha = 1;
+            if (p.life > 0) {
+              ctx.beginPath();
+              const radius = Math.max(0.1, p.size * Math.min(1, p.life * 1.5));
+              ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+              ctx.fillStyle = p.color;
+              ctx.globalAlpha = p.life;
+              ctx.fill();
+              ctx.globalAlpha = 1;
+            }
 
             if (p.life <= 0) {
               fw.particles.splice(j, 1);
