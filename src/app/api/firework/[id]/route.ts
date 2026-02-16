@@ -31,7 +31,6 @@ export async function GET(
 
     return NextResponse.json({
       message: firework.message,
-      image: firework.image,
     });
   } catch (error) {
     console.error("Error getting firework:", error);

@@ -5,7 +5,6 @@ export async function POST(request: NextRequest) {
   try {
     const bodyObj = await request.json();
     const message = bodyObj?.message;
-    const image = bodyObj?.image;
     const fireworkCount = bodyObj?.fireworkCount;
 
     const expiresAt = new Date();
@@ -14,7 +13,6 @@ export async function POST(request: NextRequest) {
     const firework = await prisma.firework.create({
       data: {
         message: message || null,
-        image: image || null,
         expiresAt,
       },
     });
