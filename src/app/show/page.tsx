@@ -34,6 +34,9 @@ const defaultColors = [
 function ShowContent() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Persist background image across frames using refs
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const imageReadyRef = useRef<boolean>(false);
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -118,22 +121,27 @@ function ShowContent() {
     });
   };
 
-  // Draw uploaded image on canvas
+  // Draw uploaded image on canvas (background)
   const drawImageOnCanvas = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
     if (!imageData) return;
-    
-    const img = new Image();
-    img.onload = () => {
-      // Draw image in center with fade effect
-      const imgSize = Math.min(width, height) * 0.6;
-      const x = (width - imgSize) / 2;
-      const y = (height - imgSize) / 2;
-      
+    const imgSize = Math.min(width, height) * 0.6;
+    const x = (width - imgSize) / 2;
+    const y = (height - imgSize) / 2;
+    // Lazy-load and cache the image element using a persistent ref
+    if (!imageRef.current) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        imageReadyRef.current = true;
+      };
+      img.src = imageData;
+      imageRef.current = img;
+    }
+    if (imageReadyRef.current && imageRef.current) {
       ctx.globalAlpha = 0.3;
-      ctx.drawImage(img, x, y, imgSize, imgSize);
+      ctx.drawImage(imageRef.current, x, y, imgSize, imgSize);
       ctx.globalAlpha = 1;
-    };
-    img.src = imageData;
+    }
   };
 
   useEffect(() => {
@@ -167,10 +175,14 @@ function ShowContent() {
     let colors = defaultColors;
     let isRunning = true;
     let hasImage = false;
+    // Image rendering state will be kept in refs to persist across renders
 
+    // 1) Randomize the number of fireworks between 30 and 50 for a richer display
+    const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
     const hasContent = msg || imageData;
-    const maxFireworks = hasContent ? 15 : 25;
-    const launchProbability = hasContent ? 0.1 : 0.15;
+    const maxFireworks = randInt(30, 50);
+    // Slightly lower probability to spawn new rockets to avoid excessive CPU use
+    const launchProbability = 0.08;
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -229,32 +241,30 @@ function ShowContent() {
     };
 
     const drawDashedLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string, width: number, life: number) => {
-      const dashLength = 3 + life * 3;
-      const gapLength = 2 + life * 2;
+      // Use a crisp, consistent dashed pattern to mimic real fireworks trails
+      const dashLength = 6;
+      const gapLength = 4;
       const dx = x2 - x1;
       const dy = y2 - y1;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      const ux = dx / (dist || 1);
+      const uy = dy / (dist || 1);
       const dashes = Math.floor(dist / (dashLength + gapLength));
-      
       if (dashes <= 0) return;
-      
-      const ux = dx / dist;
-      const uy = dy / dist;
-      
       ctx.beginPath();
-      let currentX = x1;
-      let currentY = y1;
-      let drawn = 0;
-      
-      for (let i = 0; i < dashes && drawn < dist; i++) {
-        const segmentLength = Math.min(dashLength, dist - drawn);
-        ctx.moveTo(currentX, currentY);
-        ctx.lineTo(currentX + ux * segmentLength, currentY + uy * segmentLength);
-        currentX += ux * (dashLength + gapLength);
-        currentY += uy * (dashLength + gapLength);
-        drawn += dashLength + gapLength;
+      let traveled = 0;
+      let sx = x1;
+      let sy = y1;
+      for (let i = 0; i < dashes; i++) {
+        const segmentLength = Math.min(dashLength, dist - traveled);
+        const ex = sx + ux * segmentLength;
+        const ey = sy + uy * segmentLength;
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        traveled += dashLength + gapLength;
+        sx = x1 + ux * traveled;
+        sy = y1 + uy * traveled;
       }
-      
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.globalAlpha = life * 0.6;
@@ -267,7 +277,7 @@ function ShowContent() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw uploaded image in background if exists
-      if (hasImage && imageData) {
+      if (imageData) {
         drawImageOnCanvas(ctx, canvas.width, canvas.height);
       }
 
